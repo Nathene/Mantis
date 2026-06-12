@@ -1,0 +1,11 @@
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*,
+  modernize-*,
+  cppcoreguidelines-*,
+  clang-diagnostic-*,
+  -modernize-use-trailing-return-type,
+  -cppcoreguidelines-owning-memory,
+  -readability-*
+WarningsAsErrors: 'performance-*,bugprone-*,clang-diagnostic-*'

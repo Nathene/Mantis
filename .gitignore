@@ -1,0 +1,15 @@
+# --- Build Directory ---
+_build/
+
+# --- IDE / Editor Metadata ---
+.nvim/
+.vscode/
+.cache/
+.clangd/
+
+# --- Compilation Databases ---
+compile_commands.json
+
+# --- OS Artifacts ---
+.DS_Store
+._*
