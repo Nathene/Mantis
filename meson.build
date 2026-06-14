@@ -11,6 +11,10 @@ project(
     ],
 )
 
+add_project_arguments('-Wno-c2y-extensions', language: 'cpp')
+
+catch2_dep = dependency('catch2-with-main', version: '>=3.0.0')
+
 inc = include_directories('include')
 
 mantis_lib = static_library(

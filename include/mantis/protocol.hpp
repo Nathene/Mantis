@@ -1,5 +1,6 @@
 #pragma once
 
+#include <concepts>
 #include <cstdint>
 #include <string>
 #include <array>
@@ -14,8 +15,19 @@
 namespace Protocol {
 
     template <typename T>
+    requires std::integral<T>
     struct BigEndian {
         T value;
+
+        BigEndian() = default;
+
+        BigEndian(T v) : value(v) {}
+
+        BigEndian& operator=(T v) {
+            value = v;
+            return *this;
+        }
+
         operator T() const {
             if constexpr (sizeof(T) == 8) return OSSwapBigToHostConstInt64(value);
             if constexpr (sizeof(T) == 4) return OSSwapBigToHostConstInt32(value);
@@ -97,4 +109,5 @@ namespace Protocol {
     }
 
     size_t parse_buffer(std::span<const char> buffer);
+    Order parse_order_message(std::span<const char> buffer);
 }

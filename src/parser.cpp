@@ -4,7 +4,6 @@
 #include <cstring>
 #include <iostream>
 #include <span>
-#include <string_view>
 
 #include <libkern/OSByteOrder.h>
 
@@ -34,7 +33,12 @@ namespace Protocol {
                         << " at $" << format_price(order.price)
                         << "\n";
         }
-
         return total_size;
+    }
+
+    Order parse_order_message(std::span<const char> buffer) {
+        WireOrderPlacement wire_payload;
+        std::memcpy(&wire_payload, buffer.data() + sizeof(WireHeader), sizeof(WireOrderPlacement));
+        return map_to_logic(wire_payload);
     }
 } // namespace Protocol

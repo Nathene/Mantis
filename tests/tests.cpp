@@ -1,68 +1,68 @@
+#include <libkern/OSByteOrder.h>
+#include <catch2/catch_test_macros.hpp>
 #include "mantis/arena.hpp"
 #include "mantis/protocol.hpp"
 #include <array>
-#include <iostream>
-#include <cassert>
-#include <cstddef>
+#include <vector>
+#include <cstring>
 
-// Simple test runner
-#define TEST(name) void name()
-
-TEST(test_arena_basic) {
+// Arena Tests
+TEST_CASE("Arena basic operations", "[arena]") {
     mantis::Arena arena(1024);
-    assert(arena.get_write_ptr() != nullptr);
-
-    assert(arena.advance(10));
-
-    std::cout << "[PASS] test_arena_basic\n";
+    // Use the span, not the raw pointer
+    REQUIRE(arena.get_write_span().data() != nullptr);
+    REQUIRE(arena.advance(10) == true);
 }
 
-TEST(test_arena_compaction) {
+TEST_CASE("Arena compaction", "[arena]") {
     mantis::Arena arena(100);
 
-    // 1. Fill arena with "AAAAABBBBB"
+    // 1. Fill arena
     auto span1 = arena.get_write_span();
     std::memcpy(span1.data(), "AAAAABBBBB", 10);
-    assert(arena.advance(10));
+    REQUIRE(arena.advance(10));
 
-    // 2. Consume "AAAAA" (first 5 bytes)
-    std::string test_string{"AAAAA"};
-    arena.compact(test_string.size());
+    // 2. Consume "AAAAA"
+    arena.compact(5);
 
-    // 3. Verify remaining data is "BBBBB" at the start
-    assert(std::string_view(arena.get_filled_span().data(), arena.get_filled_span().size()) == "BBBBB");
-
-    std::cout << "[PASS] test_arena_compaction\n";
+    // 3. Verify remaining data is "BBBBB"
+    auto filled = arena.get_filled_span();
+    REQUIRE(std::string_view(filled.data(), filled.size()) == "BBBBB");
 }
 
-TEST(test_arena_overflow) {
+TEST_CASE("Arena overflow protection", "[arena]") {
     mantis::Arena arena(10);
-    assert(arena.advance(10)); // Should work
-    assert(!arena.advance(1)); // Should fail (overflow)
-    std::cout << "[PASS] test_arena_overflow\n";
+    REQUIRE(arena.advance(10) == true);
+    REQUIRE(arena.advance(1) == false);
 }
 
-TEST(test_protocol_incomplete) {
-    // Test that we return 0 when buffer is too small for header
-    std::array<char, 9> raw = {'t', 'o', 'o', '_', 's', 'h', 'o', 'r', 't'};
-    std::span<char> span{raw};
+// Protocol Tests
+TEST_CASE("Protocol parsing", "[protocol]") {
 
-    assert(Protocol::parse_buffer(span) == 0);
+    SECTION("Reject incomplete header") {
+        std::array<char, 9> raw = {'t', 'o', 'o', '_', 's', 'h', 'o', 'r', 't'};
+        REQUIRE(Protocol::parse_buffer(raw) == 0);
+    }
 
-    std::cout << "[PASS] test_protocol_incomplete\n";
-}
+    SECTION("Successful full message parsing") {
+        Protocol::WireHeader header{};
+        header.magic_byte = Protocol::MAGIC_BYTE;
+        header.version = 1;
 
-// TODO Migrate to catch2
+        // EXPLICITLY use Big-Endian for the wire
+        header.message_type = OSSwapHostToBigInt16(static_cast<uint16_t>(Protocol::MessageType::OrderPlacement));
+        header.message_length = OSSwapHostToBigInt16(sizeof(Protocol::WireOrderPlacement));
 
-int main() {
-    std::cout << "Running Mantis Test Suite...\n";
-    // Arena
-    test_arena_basic();
-    test_arena_compaction();
-    test_arena_overflow();
+        Protocol::WireOrderPlacement order{};
+        order.account_id = OSSwapBigToHostConstInt64(98765);
+        order.price_ticks = OSSwapBigToHostConstInt64(110000.32 * Protocol::PRICE_SCALE);
+        order.quantity = OSSwapBigToHostConstInt32(10);
+        std::memcpy(order.symbol.data(), "BTC", 3);
 
-    // Protocol
-    test_protocol_incomplete();
-    std::cout << "All tests passed!\n";
-    return 0;
+        std::vector<char> buffer(sizeof(Protocol::WireHeader) + sizeof(Protocol::WireOrderPlacement));
+        std::memcpy(buffer.data(), &header, sizeof(Protocol::WireHeader));
+        std::memcpy(buffer.data() + sizeof(Protocol::WireHeader), &order, sizeof(Protocol::WireOrderPlacement));
+
+        REQUIRE(Protocol::parse_buffer(buffer) == buffer.size());
+    }
 }

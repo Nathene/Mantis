@@ -105,6 +105,8 @@ namespace mantis {
                 auto message = write_span.subspan(0, static_cast<size_t>(bytes_read));
                 size_t consumed = Protocol::parse_buffer(message);
                 if (consumed > 0) {
+                    auto order = Protocol::parse_order_message(message);
+                    std::cout << "Buying " << order.quantity << " shares..." << "\n";
                     arena.compact(consumed);
                 }
             }
