@@ -1,2 +1,2 @@
 # Mantis
-A blazingly-fast, zero-copy binary exchange protocol in C++ built for strict memory constraints.
+A blazingly-fast, single-allocation binary exchange protocol in C++ built for strict memory constraints.
