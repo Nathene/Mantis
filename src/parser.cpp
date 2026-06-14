@@ -1,23 +1,40 @@
 #include "mantis/protocol.hpp"
+#include <arpa/inet.h> // For ntohs
+#include <cstdint>
+#include <cstring>
 #include <iostream>
+#include <span>
 #include <string_view>
 
+#include <libkern/OSByteOrder.h>
+
 namespace Protocol {
-    void parse_buffer(const char *buffer) {
-        auto *header = reinterpret_cast<const MessageHeader*>(buffer);
+    size_t parse_buffer(std::span<const char> buffer) {
+        if (buffer.size() < sizeof(WireHeader)) return 0;
 
-        if (header->magic_byte != MAGIC_BYTE) { return; }
-        if (header->message_length > MAX_MESSAGE_SIZE) { return; }
+        WireHeader header{};
+        std::memcpy(&header, buffer.data(), sizeof(WireHeader));
 
-        const char* payload_start = buffer + sizeof(MessageHeader);
+        std::uint16_t msg_type = OSSwapBigToHostConstInt16(header.message_type);
+        std::uint16_t msg_len = OSSwapBigToHostConstInt16(header.message_length);
 
-        if (static_cast<MessageType>(header->message_type) == MessageType::OrderPlacement) {
-            auto *order = reinterpret_cast<const OrderPlacement*>(payload_start);
+        if (header.magic_byte != MAGIC_BYTE || msg_len > MAX_MESSAGE_SIZE) return 0;
 
-            std::string_view ticker(order->symbol, 8);
-            std::cout << "Buying " << order->quantity << " shares of " << ticker << " at $" << order->price << "\n";
+        size_t total_size = sizeof(WireHeader) + msg_len;
+        if (buffer.size() < total_size) return 0;
+
+        if (Protocol::to_message_type(msg_type) == MessageType::OrderPlacement) {
+            WireOrderPlacement wire_payload;
+            std::memcpy(&wire_payload, buffer.data() + sizeof(WireHeader), sizeof(WireOrderPlacement));
+
+            Order order = map_to_logic(wire_payload);
+
+            std::cout << "Buying " << order.quantity
+                        << " shares of " << order.symbol
+                        << " at $" << format_price(order.price)
+                        << "\n";
         }
 
-
+        return total_size;
     }
 } // namespace Protocol

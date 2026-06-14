@@ -10,6 +10,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cerrno>
+#include <span>
+#include <array>
 
 // MacOS kqueue headers
 #include <sys/types.h>
@@ -17,8 +19,6 @@
 #include <sys/time.h>
 
 namespace mantis {
-    constexpr uint16_t BUF_SIZE = 4096;
-
     // Use ULL suffixes so the entire multiplication happens in 64-bit space
     constexpr uint64_t ARENA_SIZE = 10ULL * 1024ULL * 1024ULL;
 
@@ -64,7 +64,7 @@ namespace mantis {
         kq_fd = kqueue();
 
         struct kevent change_event{};
-        EV_SET(&change_event, server_fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, nullptr);
+        EV_SET(&change_event, server_fd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, nullptr);
         kevent(kq_fd, &change_event, 1, nullptr, 0, nullptr);
     }
 
@@ -93,19 +93,31 @@ namespace mantis {
 
     void Server::drain_client(int client_fd) {
         while (true) {
-            char* write_ptr = arena.get_write_ptr();
-            ssize_t bytes_read = read(client_fd, write_ptr, BUF_SIZE);
+            std::span<char> write_span = arena.get_write_span();
+
+            ssize_t bytes_read = read(client_fd, write_span.data(), write_span.size());
             if (bytes_read > 0) {
-                Protocol::parse_buffer(write_ptr);
-                arena.reset();
+                if (!arena.advance(static_cast<size_t>(bytes_read))) {
+                    std::cerr << "[Mantis] Arena overflow: " << bytes_read << " bytes\n";
+                    break;
+                }
+
+                auto message = write_span.subspan(0, static_cast<size_t>(bytes_read));
+                size_t consumed = Protocol::parse_buffer(message);
+                if (consumed > 0) {
+                    arena.compact(consumed);
+                }
             }
             else if (bytes_read == -1) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    break;
+                }
                 std::cerr << "[Mantis] Failed to read from client: " << errno << '\n';
                 break;
             }
             else if (bytes_read == 0) {
+                std::cout << "[Mantis] Graceful EOF from client FD " << client_fd << '\n';
                 close(client_fd);
-                std::cout << "[Mantis] Client FD " << client_fd << " disconnected.\n";
                 break;
             }
         }
@@ -116,17 +128,24 @@ namespace mantis {
         setup_kqueue();
 
         const int MAX_EVENTS = 64;
-        struct kevent events[MAX_EVENTS];
+
+        std::array<struct kevent, MAX_EVENTS> events{};
 
         std::cout << "[Mantis] Engine online. Server started on port " << port << "...\n";
 
         while (true) {
-            int num_events = kevent(kq_fd, nullptr, 0, events, MAX_EVENTS, nullptr);
-            for (int i{}; i < num_events; ++i) {
-                if (events[i].ident == server_fd) {
+            int num_events = kevent(kq_fd, nullptr, 0, events.data(), MAX_EVENTS, nullptr);
+            if (num_events == 0) {
+                continue;
+            }
+
+            std::span<struct kevent> active_events(events.data(), static_cast<size_t>(num_events));
+
+            for (const auto& event : active_events) {
+                if (event.ident == static_cast<uintptr_t>(server_fd)) {
                     accept_connections();
                 } else {
-                    drain_client(events[i].ident);
+                    drain_client(static_cast<int>(event.ident));
                 }
             }
         }

@@ -1,48 +1,47 @@
 #pragma once
 
 #include <cstddef>
+#include <cstring>
+#include <cassert>
+#include <memory>
+#include <span>
 
 namespace mantis {
 
     class Arena {
-        char* data;
-        size_t capacity;
-        size_t current_offset;
+        std::unique_ptr<char[]> data;
+        size_t capacity{};
+        size_t current_offset{};
 
     public:
-        Arena(size_t size) : data(new char[size]), capacity(size), current_offset(0) {}
+        Arena(size_t size) : data(std::make_unique<char[]>(size)), capacity(size) {}
 
-        ~Arena() {
-            delete[] data;
+        [[nodiscard]] std::span<char> get_write_span() noexcept {
+            return {data.get() + current_offset, capacity - current_offset};
         }
-
-        Arena(const Arena&) = delete;
-        Arena& operator=(const Arena&) = delete;
-
-        Arena(Arena&& other) noexcept : data(other.data), capacity(other.capacity), current_offset(other.current_offset) {
-            other.data = nullptr;
-        }
-
-        Arena& operator=(Arena&& other) noexcept {
-            if (this != &other) {
-                delete[] data;
-                data = other.data;
-                capacity = other.capacity;
-                current_offset = other.current_offset;
-                other.data = nullptr;
-            }
-            return *this;
-        }
-
-        char* get_write_ptr() { return data + current_offset; }
-        [[nodiscard]] bool advance(size_t size) {
+        [[nodiscard]] bool advance(size_t size) noexcept {
             if (current_offset + size > capacity) {
                 return false;
             }
             current_offset += size;
             return true;
         }
+        [[nodiscard]] std::span<char> get_filled_span() const noexcept {
+            return {data.get(), current_offset};
+        }
+
         void reset() { current_offset = 0; }
 
+
+        void compact(size_t consumed_bytes) {
+            if (consumed_bytes == 0) return;
+
+            assert(consumed_bytes <= current_offset && "consumed_bytes must be less than or equal to current_offset");
+
+            size_t remaining_bytes = current_offset - consumed_bytes;
+
+            std::memmove(data.get(), data.get() + consumed_bytes, remaining_bytes);
+            current_offset = remaining_bytes;
+        }
     };
 }
