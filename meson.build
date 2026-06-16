@@ -22,6 +22,8 @@ mantis_lib = static_library(
     sources: [
         'src/server.cpp',
         'src/parser.cpp',
+        'src/protocol/protocol.cpp',
+        'src/protocol/protocol_debug.cpp',
     ],
     include_directories: inc,
 )

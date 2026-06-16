@@ -14,7 +14,7 @@ namespace mantis {
         size_t current_offset{};
 
     public:
-        Arena(size_t size) : data(std::make_unique<char[]>(size)), capacity(size) {}
+        Arena(size_t size) : data(std::make_unique_for_overwrite<char[]>(size)), capacity(size) {}
 
         [[nodiscard]] std::span<char> get_write_span() noexcept {
             return {data.get() + current_offset, capacity - current_offset};

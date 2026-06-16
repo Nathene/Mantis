@@ -14,13 +14,24 @@ namespace Protocol {
         WireHeader header{};
         std::memcpy(&header, buffer.data(), sizeof(WireHeader));
 
-        std::uint16_t msg_type = OSSwapBigToHostConstInt16(header.message_type);
-        std::uint16_t msg_len = OSSwapBigToHostConstInt16(header.message_length);
+        std::uint8_t msg_type = header.message_type;
+        std::uint16_t msg_len = header.message_length;
 
         if (header.magic_byte != MAGIC_BYTE || msg_len > MAX_MESSAGE_SIZE) return 0;
 
         size_t total_size = sizeof(WireHeader) + msg_len;
         if (buffer.size() < total_size) return 0;
+
+        std::span<const char> payload(buffer.data() + sizeof(WireHeader), msg_len);
+        std::uint16_t expected_checksum = calculate_checksum(payload);
+
+        std::uint16_t received_checksum = header.checksum;
+
+        if (expected_checksum != received_checksum) {
+            // If they sent Little Endian, the checksums won't match.
+            // Reject the message immediately.
+            return 0;
+        }
 
         if (Protocol::to_message_type(msg_type) == MessageType::OrderPlacement) {
             WireOrderPlacement wire_payload;

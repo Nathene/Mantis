@@ -45,24 +45,27 @@ TEST_CASE("Protocol parsing", "[protocol]") {
     }
 
     SECTION("Successful full message parsing") {
-        Protocol::WireHeader header{};
-        header.magic_byte = Protocol::MAGIC_BYTE;
-        header.version = 1;
+            Protocol::WireHeader header{};
+            header.magic_byte = Protocol::MAGIC_BYTE;
+            header.version = 1;
 
-        // EXPLICITLY use Big-Endian for the wire
-        header.message_type = OSSwapHostToBigInt16(static_cast<uint16_t>(Protocol::MessageType::OrderPlacement));
-        header.message_length = OSSwapHostToBigInt16(sizeof(Protocol::WireOrderPlacement));
+            header.message_type = static_cast<uint8_t>(Protocol::MessageType::OrderPlacement);
+            header.message_length = sizeof(Protocol::WireOrderPlacement);
 
-        Protocol::WireOrderPlacement order{};
-        order.account_id = OSSwapBigToHostConstInt64(98765);
-        order.price_ticks = OSSwapBigToHostConstInt64(110000.32 * Protocol::PRICE_SCALE);
-        order.quantity = OSSwapBigToHostConstInt32(10);
-        std::memcpy(order.symbol.data(), "BTC", 3);
+            Protocol::WireOrderPlacement order{};
+            order.account_id = 1;
+            order.price_ticks = static_cast<std::int64_t>(123.45 * Protocol::PRICE_SCALE);
+            order.quantity = 1;
+            std::memcpy(order.symbol.data(), "BTC", 3);
 
-        std::vector<char> buffer(sizeof(Protocol::WireHeader) + sizeof(Protocol::WireOrderPlacement));
-        std::memcpy(buffer.data(), &header, sizeof(Protocol::WireHeader));
-        std::memcpy(buffer.data() + sizeof(Protocol::WireHeader), &order, sizeof(Protocol::WireOrderPlacement));
+            // Calculate and attach checksum
+            std::span<const char> payload_bytes(reinterpret_cast<const char*>(&order), sizeof(order));
+            header.checksum = Protocol::calculate_checksum(payload_bytes);
 
-        REQUIRE(Protocol::parse_buffer(buffer) == buffer.size());
-    }
+            std::vector<char> buffer(sizeof(Protocol::WireHeader) + sizeof(Protocol::WireOrderPlacement));
+            std::memcpy(buffer.data(), &header, sizeof(Protocol::WireHeader));
+            std::memcpy(buffer.data() + sizeof(Protocol::WireHeader), &order, sizeof(Protocol::WireOrderPlacement));
+
+            REQUIRE(Protocol::parse_buffer(buffer) == buffer.size());
+        }
 }
