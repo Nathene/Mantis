@@ -41,32 +41,16 @@ namespace mantis {
         }
         server_fd = FileDescriptor{fd_val};
 
-        if (auto res = mantis::net::set_reuse_addr(server_fd); !res.is_ok()) {
-            std::cerr << "Failed to set reuse addr: " << static_cast<int>(res.code) << '\n';
-            exit(EXIT_FAILURE);
-        }
-
-        if (auto res = mantis::net::make_socket_non_blocking(server_fd); !res.is_ok()) {
-            std::cerr << "Failed to make socket non-blocking: " << static_cast<int>(res.code) << '\n';
-            exit(EXIT_FAILURE);
-        }
-
-        if (auto res = mantis::net::bind_socket(server_fd, port); !res.is_ok()) {
-            std::cerr << "Failed to bind socket to port " << port
-                      << ": " << std::strerror(errno) << " (errno: " << errno << ")" << '\n';
-            exit(EXIT_FAILURE);
-        }
-
-        if (auto res = mantis::net::listen_socket(server_fd); !res.is_ok()) {
-            std::cerr << "Failed to listen socket: " << std::strerror(errno) << " (errno: " << errno << ")" << '\n';
-            exit(EXIT_FAILURE);
-        }
+        net::set_reuse_addr(server_fd).expect("Failed to reuse addr");
+        net::make_socket_non_blocking(server_fd).expect("Failed to make socket non-blocking");
+        net::bind_socket(server_fd, port).expect("Failed to bind socket");
+        net::listen_socket(server_fd).expect("Failed to listen socket");
     }
 
     // TODO: Support epoll as well.
 
     void Server::setup_kqueue() {
-        kq_fd = kqueue();
+        kq_fd = FileDescriptor{kqueue()};
 
         struct kevent change_event{};
         EV_SET(&change_event, server_fd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, nullptr);
@@ -88,7 +72,7 @@ namespace mantis {
 
             FileDescriptor client_fd{raw_fd};
 
-            if (auto res = mantis::net::make_socket_non_blocking(client_fd); !res.is_ok()) {
+            if (auto res = net::make_socket_non_blocking(client_fd); !res.is_ok()) {
                 std::cerr << "Failed to set client non-blocking\n";
             }
 

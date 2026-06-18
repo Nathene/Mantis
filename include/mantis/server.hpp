@@ -13,13 +13,13 @@ inline constexpr uint64_t ARENA_SIZE = 10ULL * 1024ULL * 1024ULL;
 
 class Server {
     FileDescriptor server_fd{INVALID_FD};
-    int kq_fd{-1};
+    FileDescriptor kq_fd{INVALID_FD};
 
     Port port;
     Arena arena;
 
     // internal helpers
-    inline Result make_socket_non_blocking(FileDescriptor fd);
+    Result make_socket_non_blocking(FileDescriptor fd);
     void setup_socket();
     void setup_kqueue();
 
